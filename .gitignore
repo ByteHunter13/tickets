@@ -1,0 +1,11 @@
+# Entorno virtual
+/.venv
+
+# Claves importantes
+.env
+
+# Carpetas con contenido pesado
+/uploads
+
+# Archivo de plan
+plan-sistema-tickets-backend.md
