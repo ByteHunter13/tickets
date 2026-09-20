@@ -1,11 +1,11 @@
-# Entorno virtual
-/.venv
-
-# Claves importantes
+.venv/
+__pycache__/
+*.pyc
 .env
-
-# Carpetas con contenido pesado
-/uploads
-
-# Archivo de plan
+backend/uploads/*
+!backend/uploads/.gitkeep
+node_modules/
+.next/
+.pytest_cache/
 plan-sistema-tickets-backend.md
+CLAUDE.md
