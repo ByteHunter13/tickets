@@ -22,3 +22,4 @@ class TicketEventType(StrEnum):
     ticket_created = "ticket_created"
     status_changed = "status_changed"
     priority_changed = "priority_changed"
+    assignment_changed = "assignment_changed"

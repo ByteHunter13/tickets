@@ -7,7 +7,8 @@ from app.core.config import settings
 from app.core.security import create_access_token, hash_password
 from app.db.session import get_db
 from app.main import app
-from app.models.enums import Role
+from app.models.enums import Role, TicketPriority, TicketStatus
+from app.models.ticket import Category, Ticket
 from app.models.user import User
 
 # El esquema ya debe existir vía `alembic upgrade head` (ver CLAUDE.md).
@@ -59,6 +60,47 @@ def make_user(db_session):
         return user
 
     return _make_user
+
+@pytest.fixture
+def make_category(db_session):
+    counter = {"n": 0}
+
+    def _make_category() -> Category:
+        counter["n"] += 1
+        category = Category(name=f"Category {counter['n']}")
+        db_session.add(category)
+        db_session.commit()
+        db_session.refresh(category)
+        return category
+
+    return _make_category
+
+@pytest.fixture
+def make_ticket(db_session, make_user, make_category):
+    def _make_ticket(
+        *,
+        created_by: User | None = None,
+        status: TicketStatus = TicketStatus.open,
+        priority: TicketPriority = TicketPriority.medium,
+        assigned_to_id: int | None = None,
+        category_id: int | None = None,
+    ) -> Ticket:
+        creator = created_by or make_user()
+        ticket = Ticket(
+            title="Test ticket",
+            description="Test ticket description",
+            status=status,
+            priority=priority,
+            created_by_id=creator.id,
+            assigned_to_id=assigned_to_id,
+            category_id=category_id,
+        )
+        db_session.add(ticket)
+        db_session.commit()
+        db_session.refresh(ticket)
+        return ticket
+
+    return _make_ticket
 
 @pytest.fixture
 def auth_header():

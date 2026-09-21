@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+import app.db.base  # noqa: F401  # registra todos los modelos antes de que SQLAlchemy configure los mappers
 from app.api.routes import api_router
 
 app = FastAPI(title="Sistema de Tickets", version="0.1.0")
