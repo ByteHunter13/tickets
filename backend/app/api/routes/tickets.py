@@ -5,7 +5,10 @@ from fastapi import APIRouter, Depends, Query
 from app.api.deps import CurrentUser, DbSession, require_roles
 from app.models.enums import Role, TicketPriority, TicketStatus
 from app.models.user import User
+from app.schemas.comment import CommentCreate, CommentRead
+from app.schemas.event import TicketEventRead
 from app.schemas.ticket import TicketCreate, TicketPage, TicketRead, TicketStaffUpdate, TicketUpdate
+from app.services import comments as comments_service
 from app.services import tickets as tickets_service
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
@@ -58,3 +61,18 @@ def update_ticket_staff(
     agent: Annotated[User, Depends(require_roles(Role.admin, Role.agent))],
 ):
     return tickets_service.update_ticket_staff(db, actor=agent, ticket_id=ticket_id, data=data)
+
+
+@router.post("/{ticket_id}/comments", response_model=CommentRead, status_code=201)
+def create_comment(ticket_id: int, data: CommentCreate, db: DbSession, user: CurrentUser):
+    return comments_service.create_comment(db, actor=user, ticket_id=ticket_id, data=data)
+
+
+@router.get("/{ticket_id}/comments", response_model=list[CommentRead])
+def list_comments(ticket_id: int, db: DbSession, user: CurrentUser):
+    return comments_service.list_comments(db, viewer=user, ticket_id=ticket_id)
+
+
+@router.get("/{ticket_id}/events", response_model=list[TicketEventRead])
+def list_ticket_events(ticket_id: int, db: DbSession, user: CurrentUser):
+    return tickets_service.list_ticket_events(db, viewer=user, ticket_id=ticket_id)

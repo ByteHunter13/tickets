@@ -13,7 +13,15 @@ from app.schemas.ticket import TicketCreate, TicketStaffUpdate, TicketUpdate
 from app.services.users import get_user_or_404
 
 
-def _log_event(
+TRACKED_FIELDS_EVENTS = {
+    "status": TicketEventType.status_changed,
+    "priority": TicketEventType.priority_changed,
+    "assigned_to_id": TicketEventType.assignment_changed,
+    "category_id": TicketEventType.category_changed,
+}
+
+
+def log_event(
     db: Session,
     *,
     ticket: Ticket,
@@ -33,6 +41,23 @@ def _log_event(
     )
 
 
+def apply_ticket_changes(db: Session, *, ticket: Ticket, changes: dict, actor: User) -> None:
+    for field, new_value in changes.items():
+        old_value = getattr(ticket, field)
+        if old_value == new_value:
+            continue
+        if field in TRACKED_FIELDS_EVENTS:
+            log_event(
+                db,
+                ticket=ticket,
+                actor=actor,
+                event_type=TRACKED_FIELDS_EVENTS[field],
+                old_value=None if old_value is None else str(old_value),
+                new_value=None if new_value is None else str(new_value),
+            )
+        setattr(ticket, field, new_value)
+
+
 def create_ticket(db: Session, *, creator: User, data: TicketCreate) -> Ticket:
     ticket = Ticket(
         title=data.title,
@@ -44,7 +69,7 @@ def create_ticket(db: Session, *, creator: User, data: TicketCreate) -> Ticket:
     db.add(ticket)
     db.flush()
 
-    _log_event(db, ticket=ticket, actor=creator, event_type=TicketEventType.ticket_created)
+    log_event(db, ticket=ticket, actor=creator, event_type=TicketEventType.ticket_created)
 
     db.commit()
     db.refresh(ticket)
@@ -139,49 +164,28 @@ def update_ticket_staff(
                 detail="Solo se puede asignar el ticket a un agent o admin",
             )
 
-    if "status" in changes and changes["status"] != ticket.status:
-        old_status = ticket.status
-        new_status = changes["status"]
-        ticket.status = new_status
-        _log_event(
-            db,
-            ticket=ticket,
-            actor=actor,
-            event_type=TicketEventType.status_changed,
-            old_value=old_status,
-            new_value=new_status,
-        )
+    old_status = ticket.status
+    new_status = changes.get("status")
+
+    apply_ticket_changes(db, ticket=ticket, changes=changes, actor=actor)
+
+    if new_status is not None and new_status != old_status:
         if new_status == TicketStatus.closed:
             ticket.closed_at = datetime.now(timezone.utc)
         elif old_status == TicketStatus.closed:
             ticket.closed_at = None
 
-    if "priority" in changes and changes["priority"] != ticket.priority:
-        old_priority = ticket.priority
-        new_priority = changes["priority"]
-        ticket.priority = new_priority
-        _log_event(
-            db,
-            ticket=ticket,
-            actor=actor,
-            event_type=TicketEventType.priority_changed,
-            old_value=old_priority,
-            new_value=new_priority,
-        )
-
-    if "assigned_to_id" in changes and changes["assigned_to_id"] != ticket.assigned_to_id:
-        old_assigned = ticket.assigned_to_id
-        new_assigned = changes["assigned_to_id"]
-        ticket.assigned_to_id = new_assigned
-        _log_event(
-            db,
-            ticket=ticket,
-            actor=actor,
-            event_type=TicketEventType.assignment_changed,
-            old_value=str(old_assigned) if old_assigned is not None else None,
-            new_value=str(new_assigned) if new_assigned is not None else None,
-        )
-
     db.commit()
     db.refresh(ticket)
     return ticket
+
+
+def list_ticket_events(db: Session, *, viewer: User, ticket_id: int) -> Sequence[TicketEvent]:
+    ticket = get_ticket_or_404(db, viewer=viewer, ticket_id=ticket_id)
+
+    query = (
+        select(TicketEvent)
+        .where(TicketEvent.ticket_id == ticket.id)
+        .order_by(TicketEvent.created_at)
+    )
+    return db.scalars(query).all()
