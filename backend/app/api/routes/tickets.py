@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, UploadFile
 
 from app.api.deps import CurrentUser, DbSession, require_roles
 from app.models.enums import Role, TicketPriority, TicketStatus
@@ -17,8 +17,8 @@ router = APIRouter(prefix="/tickets", tags=["tickets"])
 
 
 @router.post("", response_model=TicketRead, status_code=201)
-def create_ticket(data: TicketCreate, db: DbSession, user: CurrentUser):
-    return tickets_service.create_ticket(db, creator=user, data=data)
+def create_ticket(data: TicketCreate, db: DbSession, user: CurrentUser, background: BackgroundTasks):
+    return tickets_service.create_ticket(db, creator=user, data=data, background=background)
 
 
 @router.get("", response_model=TicketPage)
@@ -61,13 +61,20 @@ def update_ticket_staff(
     data: TicketStaffUpdate,
     db: DbSession,
     agent: Annotated[User, Depends(require_roles(Role.admin, Role.agent))],
+    background: BackgroundTasks,
 ):
-    return tickets_service.update_ticket_staff(db, actor=agent, ticket_id=ticket_id, data=data)
+    return tickets_service.update_ticket_staff(
+        db, actor=agent, ticket_id=ticket_id, data=data, background=background
+    )
 
 
 @router.post("/{ticket_id}/comments", response_model=CommentRead, status_code=201)
-def create_comment(ticket_id: int, data: CommentCreate, db: DbSession, user: CurrentUser):
-    return comments_service.create_comment(db, actor=user, ticket_id=ticket_id, data=data)
+def create_comment(
+    ticket_id: int, data: CommentCreate, db: DbSession, user: CurrentUser, background: BackgroundTasks
+):
+    return comments_service.create_comment(
+        db, actor=user, ticket_id=ticket_id, data=data, background=background
+    )
 
 
 @router.get("/{ticket_id}/comments", response_model=list[CommentRead])

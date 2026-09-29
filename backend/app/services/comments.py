@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 
-from fastapi import HTTPException
+from fastapi import BackgroundTasks, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -8,10 +8,13 @@ from app.models.comment import Comment
 from app.models.enums import Role, TicketEventType
 from app.models.user import User
 from app.schemas.comment import CommentCreate
+from app.services import notifications
 from app.services.tickets import get_ticket_or_404, log_event
 
 
-def create_comment(db: Session, *, actor: User, ticket_id: int, data: CommentCreate) -> Comment:
+def create_comment(
+    db: Session, *, actor: User, ticket_id: int, data: CommentCreate, background: BackgroundTasks
+) -> Comment:
     ticket = get_ticket_or_404(db, viewer=actor, ticket_id=ticket_id)
 
     if data.is_internal and actor.role == Role.user:
@@ -32,6 +35,10 @@ def create_comment(db: Session, *, actor: User, ticket_id: int, data: CommentCre
 
     db.commit()
     db.refresh(comment)
+
+    if not data.is_internal:
+        notifications.notify_new_comment(background, ticket=ticket, actor=actor)
+
     return comment
 
 

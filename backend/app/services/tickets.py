@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from datetime import datetime, timezone
 
-from fastapi import HTTPException
+from fastapi import BackgroundTasks, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -10,6 +10,7 @@ from app.models.event import TicketEvent
 from app.models.ticket import Ticket
 from app.models.user import User
 from app.schemas.ticket import TicketCreate, TicketStaffUpdate, TicketUpdate
+from app.services import notifications
 from app.services.users import get_user_or_404
 
 
@@ -58,7 +59,9 @@ def apply_ticket_changes(db: Session, *, ticket: Ticket, changes: dict, actor: U
         setattr(ticket, field, new_value)
 
 
-def create_ticket(db: Session, *, creator: User, data: TicketCreate) -> Ticket:
+def create_ticket(
+    db: Session, *, creator: User, data: TicketCreate, background: BackgroundTasks
+) -> Ticket:
     ticket = Ticket(
         title=data.title,
         description=data.description,
@@ -73,6 +76,9 @@ def create_ticket(db: Session, *, creator: User, data: TicketCreate) -> Ticket:
 
     db.commit()
     db.refresh(ticket)
+
+    notifications.notify_ticket_created(background, ticket=ticket, creator=creator)
+
     return ticket
 
 
@@ -148,7 +154,12 @@ def update_ticket(db: Session, *, actor: User, ticket_id: int, data: TicketUpdat
 
 
 def update_ticket_staff(
-    db: Session, *, actor: User, ticket_id: int, data: TicketStaffUpdate
+    db: Session,
+    *,
+    actor: User,
+    ticket_id: int,
+    data: TicketStaffUpdate,
+    background: BackgroundTasks,
 ) -> Ticket:
     ticket = db.get(Ticket, ticket_id)
     if ticket is None:
@@ -165,6 +176,7 @@ def update_ticket_staff(
             )
 
     old_status = ticket.status
+    old_assigned_to_id = ticket.assigned_to_id
     new_status = changes.get("status")
 
     apply_ticket_changes(db, ticket=ticket, changes=changes, actor=actor)
@@ -177,6 +189,12 @@ def update_ticket_staff(
 
     db.commit()
     db.refresh(ticket)
+
+    if ticket.status != old_status:
+        notifications.notify_status_changed(background, ticket=ticket)
+    if ticket.assigned_to_id != old_assigned_to_id and ticket.assigned_to_id is not None:
+        notifications.notify_ticket_assigned(background, ticket=ticket)
+
     return ticket
 
 
