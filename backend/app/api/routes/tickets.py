@@ -1,13 +1,15 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 
 from app.api.deps import CurrentUser, DbSession, require_roles
 from app.models.enums import Role, TicketPriority, TicketStatus
 from app.models.user import User
+from app.schemas.attachment import AttachmentRead
 from app.schemas.comment import CommentCreate, CommentRead
 from app.schemas.event import TicketEventRead
 from app.schemas.ticket import TicketCreate, TicketPage, TicketRead, TicketStaffUpdate, TicketUpdate
+from app.services import attachments as attachments_service
 from app.services import comments as comments_service
 from app.services import tickets as tickets_service
 
@@ -76,3 +78,15 @@ def list_comments(ticket_id: int, db: DbSession, user: CurrentUser):
 @router.get("/{ticket_id}/events", response_model=list[TicketEventRead])
 def list_ticket_events(ticket_id: int, db: DbSession, user: CurrentUser):
     return tickets_service.list_ticket_events(db, viewer=user, ticket_id=ticket_id)
+
+
+@router.post("/{ticket_id}/attachments", response_model=AttachmentRead, status_code=201)
+def upload_attachment(
+    ticket_id: int, db: DbSession, user: CurrentUser, file: Annotated[UploadFile, File()]
+):
+    return attachments_service.create_attachment(db, actor=user, ticket_id=ticket_id, file=file)
+
+
+@router.get("/{ticket_id}/attachments", response_model=list[AttachmentRead])
+def list_attachments(ticket_id: int, db: DbSession, user: CurrentUser):
+    return attachments_service.list_attachments(db, viewer=user, ticket_id=ticket_id)

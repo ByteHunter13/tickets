@@ -19,7 +19,7 @@ def main() -> None:
             )
         )
         db.commit()
-    print("Categoría agregada")
+    print("Categoría agregada ")
 
 if __name__=="__main__":
     main()
